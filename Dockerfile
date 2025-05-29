@@ -1,6 +1,9 @@
-# build stage
-FROM golang:1.24.2-alpine AS build-env
-RUN apk add --no-cache \
+# syntax=docker/dockerfile:1
+FROM --platform=$BUILDPLATFORM tonistiigi/xx AS xx
+FROM --platform=$BUILDPLATFORM golang:1.24.2-alpine AS build-env
+COPY --from=xx / /
+
+RUN xx-apk add --no-cache \
     git \
     make \
     gcc \
@@ -21,7 +24,13 @@ RUN go mod download
 # add source
 ADD . .
 
+ARG TARGETPLATFORM
+RUN xx-info env
+
+RUN xx-go --wrap
 RUN make build
+RUN xx-verify /src/bin/dex
+RUN xx-go --unwrap
 
 RUN mkdir -p \
         /rootfs/app \
