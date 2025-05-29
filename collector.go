@@ -17,8 +17,8 @@ import (
 var labelCname = []string{"container_name"}
 
 type DockerCollector struct {
-	cli          *client.Client
-	container_re *regexp.Regexp
+	cli         *client.Client
+	containerRe *regexp.Regexp
 }
 
 func newDockerCollector() *DockerCollector {
@@ -37,8 +37,8 @@ func newDockerCollector() *DockerCollector {
 	}
 
 	return &DockerCollector{
-		cli:          cli,
-		container_re: re,
+		cli:         cli,
+		containerRe: re,
 	}
 }
 
@@ -69,9 +69,11 @@ func (c *DockerCollector) processContainer(cont container.Summary, ch chan<- pro
 	defer wg.Done()
 
 	cName := strings.TrimPrefix(strings.Join(cont.Names, ";"), "/")
-	if !c.container_re.MatchString(cName) {
+	submatches := c.containerRe.FindStringSubmatch(cName)
+	if len(submatches) == 0 {
 		return
 	}
+	cName = submatches[len(submatches)-1]
 
 	var isRunning, isRestarting, isExited float64
 
