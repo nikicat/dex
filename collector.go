@@ -3,10 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"regexp"
 	"strings"
 	"sync"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/prometheus/client_golang/prometheus"
@@ -16,7 +17,8 @@ import (
 var labelCname = []string{"container_name"}
 
 type DockerCollector struct {
-	cli *client.Client
+	cli          *client.Client
+	container_re *regexp.Regexp
 }
 
 func newDockerCollector() *DockerCollector {
@@ -24,9 +26,19 @@ func newDockerCollector() *DockerCollector {
 	if err != nil {
 		log.Fatalf("can't create docker client: %v", err)
 	}
+	container_name_regex, found := os.LookupEnv("DEX_FILTER_CONTAINER")
+	if !found {
+		container_name_regex = ".*"
+	}
+
+	re, err := regexp.Compile(container_name_regex)
+	if err != nil {
+		log.Fatalf("invalid container filter regexp '%s': %v", container_name_regex, err)
+	}
 
 	return &DockerCollector{
-		cli: cli,
+		cli:          cli,
+		container_re: re,
 	}
 }
 
@@ -53,10 +65,13 @@ func (c *DockerCollector) Collect(ch chan<- prometheus.Metric) {
 	wg.Wait()
 }
 
-func (c *DockerCollector) processContainer(cont types.Container, ch chan<- prometheus.Metric, wg *sync.WaitGroup) {
+func (c *DockerCollector) processContainer(cont container.Summary, ch chan<- prometheus.Metric, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	cName := strings.TrimPrefix(strings.Join(cont.Names, ";"), "/")
+	if !c.container_re.MatchString(cName) {
+		return
+	}
 
 	var isRunning, isRestarting, isExited float64
 
